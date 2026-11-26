@@ -1,0 +1,44 @@
+{
+  "name": "dsh-liangdeng",
+  "version": "0.1.1",
+  "description": "A call popup in the middle of the screen and a draggable row of session avatars for DeepSeek Harness.",
+  "type": "module",
+  "license": "MIT",
+  "author": "BaihaiMianbaofang",
+  "engines": {
+    "dsh": ">=0.2.1-rc.1 <0.2.2-0 || >=0.2.2-rc.1 <0.3.0-0"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "notification",
+    "avatar",
+    "dock"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BaihaiMianbaofang/dsh-liangdeng.git"
+  },
+  "homepage": "https://github.com/BaihaiMianbaofang/dsh-liangdeng#readme",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}
