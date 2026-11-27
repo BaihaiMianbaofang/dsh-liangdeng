@@ -116,14 +116,46 @@ export function apply(ctx) {
             return;
           }
 
-          if (routePath === `${ROUTE_PREFIX}/available` && method === 'GET') {
+          if (routePath === `${ROUTE_PREFIX}/audio` && method === 'GET') {
             const root = findWorkspaceRoot();
-            const target = root
-              ? path.resolve(root, path.join('留言本', '留言本.md'))
-              : null;
-            sendJson(response, 200, {
-              liuyanben: Boolean(target && fs.existsSync(target)),
-            });
+            if (!root) {
+              sendJson(response, 500, { error: 'workspace not found' });
+              return;
+            }
+            let relative = '';
+            try {
+              relative = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
+                .searchParams.get('path') ?? '';
+            } catch {
+              relative = '';
+            }
+            const types = {
+              '.mp3': 'audio/mpeg',
+              '.wav': 'audio/wav',
+              '.ogg': 'audio/ogg',
+              '.m4a': 'audio/mp4',
+              '.aac': 'audio/aac',
+            };
+            const extension = path.extname(relative).toLowerCase();
+            const absolute = path.resolve(root, relative);
+            if (
+              !types[extension] ||
+              !absolute.startsWith(path.resolve(root)) ||
+              !fs.existsSync(absolute)
+            ) {
+              sendJson(response, 404, { error: 'no such audio' });
+              return;
+            }
+            try {
+              const data = fs.readFileSync(absolute);
+              response.statusCode = 200;
+              response.setHeader('content-type', types[extension]);
+              response.setHeader('content-length', String(data.length));
+              response.setHeader('cache-control', 'no-store');
+              response.end(data);
+            } catch (error) {
+              sendJson(response, 500, { error: String((error && error.message) || error) });
+            }
             return;
           }
 

@@ -17,9 +17,7 @@ window.__ModuleLoader__.load({
     const LAMP = '#d9a441';       // 亮灯：暖灯黄
     const LAMP_OFF = '#8c826b';   // 熄灭：灰暖色
 
-    const PARTNERS = [
-    ];
-
+    const PARTNERS = [];
     const overlayStyle = {
       position: 'fixed',
       inset: 0,
@@ -153,14 +151,63 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        ctx.slots.inject('shell.overlay', () =>
+          ctx.slots.register(
+            { name: 'shell.overlay', id: 'light-settings', order: 990, label: () => '亮灯设置' },
+            LightSettingsModal,
+          ),
+        );
         // ---------- 呼叫弹窗 ----------
         let chimeCtx = null;
-        function playChime() {
+
+        // ---------- 亮灯设置（颜色 / 文字 / 提示音） ----------
+        const LIGHT_KEY = 'dsh.light.settings.v1';
+        const LIGHT_DEFAULT = { sound: true, volume: 60, audioPath: '', colors: {}, labels: {} };
+        const lightStore = {
+          value: (() => {
+            try {
+              const raw = window.localStorage.getItem(LIGHT_KEY);
+              const parsed = raw ? JSON.parse(raw) : null;
+              return { ...LIGHT_DEFAULT, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+            } catch {
+              return { ...LIGHT_DEFAULT };
+            }
+          })(),
+          open: false,
+          listeners: new Set(),
+        };
+        function setLightSettings(patch) {
+          lightStore.value = { ...lightStore.value, ...patch };
+          try {
+            window.localStorage.setItem(LIGHT_KEY, JSON.stringify(lightStore.value));
+          } catch {
+            // 存不了也不影响本次使用
+          }
+          for (const listener of lightStore.listeners) listener();
+        }
+        function setSettingsOpen(next) {
+          lightStore.open = next;
+          for (const listener of lightStore.listeners) listener();
+        }
+        function useLightStore() {
+          const [, force] = React.useState(0);
+          React.useEffect(() => {
+            const listener = () => force((count) => count + 1);
+            lightStore.listeners.add(listener);
+            return () => lightStore.listeners.delete(listener);
+          }, []);
+          return { settings: lightStore.value, open: lightStore.open };
+        }
+
+        let cueAudio = null;
+        let defaultAudioPath = '';
+        function playChime(volume) {
           try {
             const Ctor = window.AudioContext || window.webkitAudioContext;
             if (!Ctor) return;
             if (!chimeCtx) chimeCtx = new Ctor();
             if (chimeCtx.state === 'suspended') void chimeCtx.resume().catch(() => {});
+            const level = Math.max(0.0001, Math.min(1, volume)) * 0.09;
             const start = chimeCtx.currentTime;
             const notes = [
               [880.0, 0],
@@ -173,7 +220,7 @@ window.__ModuleLoader__.load({
               osc.type = 'sine';
               osc.frequency.value = freq;
               gain.gain.setValueAtTime(0.0001, start + offset);
-              gain.gain.linearRampToValueAtTime(0.09, start + offset + 0.02);
+              gain.gain.linearRampToValueAtTime(level, start + offset + 0.02);
               gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.42);
               osc.connect(gain);
               gain.connect(chimeCtx.destination);
@@ -181,8 +228,200 @@ window.__ModuleLoader__.load({
               osc.stop(start + offset + 0.45);
             }
           } catch {
-            // No audio available: the popup still shows.
+            // 没声音也不影响弹窗
           }
+        }
+
+        /** 有自定义音频就播它，播不了/没设置就退回默认三音。 */
+        function playCue() {
+          const settings = lightStore.value;
+          if (!settings.sound) return;
+          const volume = Math.max(0, Math.min(100, Number(settings.volume) || 0)) / 100;
+          const path = String(settings.audioPath || '').trim() || defaultAudioPath;
+          if (path) {
+            try {
+              const url = `/call-panel/audio?path=${encodeURIComponent(path)}`;
+              if (!cueAudio) cueAudio = new Audio();
+              if (cueAudio.getAttribute('data-src') !== url) {
+                cueAudio.setAttribute('data-src', url);
+                cueAudio.src = url;
+              }
+              cueAudio.volume = volume;
+              cueAudio.currentTime = 0;
+              const playing = cueAudio.play();
+              if (playing && typeof playing.catch === 'function') {
+                playing.catch(() => playChime(volume));
+              }
+              return;
+            } catch {
+              // 落到默认音
+            }
+          }
+          playChime(volume);
+        }
+
+        function LightSettingsModal() {
+          const { settings, open } = useLightStore();
+          const [path, setPath] = React.useState(settings.audioPath || '');
+          React.useEffect(() => {
+            if (open) setPath(settings.audioPath || '');
+          }, [open]);
+
+          React.useEffect(() => {
+            if (!open) return undefined;
+            const onKey = (event) => {
+              if (event.key === 'Escape') {
+                event.preventDefault();
+                setSettingsOpen(false);
+              }
+            };
+            window.addEventListener('keydown', onKey);
+            return () => window.removeEventListener('keydown', onKey);
+          }, [open]);
+
+          if (!open) return null;
+
+          const overlay = {
+            position: 'fixed',
+            inset: 0,
+            zIndex: 2147482800,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(0,0,0,0.4)',
+          };
+          const card = {
+            width: 'min(430px, 90vw)',
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            boxSizing: 'border-box',
+            borderRadius: 16,
+            padding: '18px 20px',
+            background: 'var(--dsw-alias-bg-elevated, var(--dsw-alias-bg-base, #ffffff))',
+            color: 'var(--dsw-alias-label-primary, #1a1a1a)',
+            border: '1px solid var(--dsw-alias-separator, rgba(0,0,0,0.12))',
+            boxShadow: '0 24px 64px rgba(0,0,0,0.42)',
+            fontFamily: 'inherit',
+            fontSize: 13,
+          };
+          const labelStyle = { fontSize: 12, color: 'var(--dsw-alias-label-secondary, #6b6b6b)', marginBottom: 4 };
+          const rowStyle = { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 };
+          const inputStyle = {
+            flex: 1,
+            minWidth: 0,
+            font: 'inherit',
+            fontSize: 12.5,
+            padding: '5px 8px',
+            borderRadius: 7,
+            border: '1px solid var(--dsw-alias-separator, rgba(0,0,0,0.18))',
+            background: 'transparent',
+            color: 'inherit',
+          };
+
+          const persons = (readPartners().length ? readPartners() : PARTNERS.map((p) => ({ ...p })));
+
+          return h(
+            'div',
+            {
+              style: overlay,
+              role: 'presentation',
+              onClick: (event) => {
+                if (event.target === event.currentTarget) setSettingsOpen(false);
+              },
+            },
+            h(
+              'div',
+              { style: card, role: 'dialog', 'aria-modal': 'true', 'aria-label': '亮灯设置' },
+              h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 } },
+                h('span', { style: { fontSize: 15, fontWeight: 600 } }, '亮灯 · 设置'),
+                h('button', {
+                  type: 'button',
+                  onClick: () => setSettingsOpen(false),
+                  style: { border: 'none', background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 16, lineHeight: 1 },
+                }, '×'),
+              ),
+              h('div', { style: { ...labelStyle, fontWeight: 600 } }, '提示音'),
+              h('div', { style: rowStyle },
+                h('label', { style: { display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' } },
+                  h('input', {
+                    type: 'checkbox',
+                    checked: settings.sound !== false,
+                    onChange: (event) => setLightSettings({ sound: event.target.checked }),
+                  }),
+                  '开启提示音',
+                ),
+                h('span', { style: { ...labelStyle, margin: 0 } }, '音量'),
+                h('input', {
+                  type: 'range',
+                  min: 0,
+                  max: 100,
+                  value: Number(settings.volume) || 0,
+                  onChange: (event) => setLightSettings({ volume: Number(event.target.value) }),
+                  style: { width: 120 },
+                }),
+                h('span', { style: { fontSize: 12 } }, `${Number(settings.volume) || 0}`),
+              ),
+              h('div', { style: labelStyle }, '音频文件（相对工作区；留空 = 默认三音）'),
+              h('div', { style: rowStyle },
+                h('input', {
+                  type: 'text',
+                  value: path,
+                  placeholder: '声音/提示音.mp3',
+                  onChange: (event) => setPath(event.target.value),
+                  onBlur: () => setLightSettings({ audioPath: path.trim() }),
+                  style: inputStyle,
+                }),
+                h('button', {
+                  type: 'button',
+                  onClick: () => setLightSettings({ audioPath: path.trim() }),
+                  style: { font: 'inherit', fontSize: 12, padding: '5px 10px', borderRadius: 7, cursor: 'pointer', border: '1px solid var(--dsw-alias-separator, rgba(0,0,0,0.18))', background: 'transparent', color: 'inherit' },
+                }, '应用'),
+                h('button', {
+                  type: 'button',
+                  onClick: () => playCue(),
+                  style: { font: 'inherit', fontSize: 12, padding: '5px 10px', borderRadius: 7, cursor: 'pointer', border: '1px solid var(--dsw-alias-separator, rgba(0,0,0,0.18))', background: 'transparent', color: 'inherit' },
+                }, '试听'),
+              ),
+              h('div', { style: { ...labelStyle, marginTop: 8, fontWeight: 600 } }, '颜色 / 文字'),
+              ...persons.map((person) => {
+                const name = person.name;
+                const color = lightStore.value.colors[name] || person.color;
+                const label = lightStore.value.labels[name] || name.slice(0, 1);
+                return h(
+                  'div',
+                  { key: name, style: rowStyle },
+                  h('span', { style: { width: 46, fontSize: 12.5 } }, name),
+                  h('input', {
+                    type: 'color',
+                    value: color,
+                    onChange: (event) => setLightSettings({ colors: { ...lightStore.value.colors, [name]: event.target.value } }),
+                    style: { width: 34, height: 26, padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' },
+                  }),
+                  h('input', {
+                    type: 'text',
+                    value: label,
+                    maxLength: 2,
+                    onChange: (event) => setLightSettings({ labels: { ...lightStore.value.labels, [name]: event.target.value } }),
+                    style: { ...inputStyle, width: 40, flex: 'none', textAlign: 'center' },
+                  }),
+                  h('button', {
+                    type: 'button',
+                    title: '恢复默认',
+                    onClick: () => {
+                      const colors = { ...lightStore.value.colors };
+                      const labels = { ...lightStore.value.labels };
+                      delete colors[name];
+                      delete labels[name];
+                      setLightSettings({ colors, labels });
+                    },
+                    style: { font: 'inherit', fontSize: 11, padding: '3px 7px', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--dsw-alias-separator, rgba(0,0,0,0.18))', background: 'transparent', color: 'inherit' },
+                  }, '默认'),
+                );
+              }),
+              h('div', { style: { ...labelStyle, marginTop: 10, lineHeight: 1.5 } },
+                '音频只认工作区里的 .mp3 / .wav / .ogg / .m4a；放好文件、把路径填进来即可。设置存在这台电脑的浏览器里。'),
+            ),
+          );
         }
 
         function CallOverlay() {
@@ -201,7 +440,7 @@ window.__ModuleLoader__.load({
                 if (alive && first && first.id !== lastId.current) {
                   lastId.current = first.id;
                   setItem(first);
-                  playChime();
+                  playCue();
                 }
               } catch {
                 // Host not ready: try again next tick.
@@ -431,11 +670,12 @@ window.__ModuleLoader__.load({
                   : 'transform 120ms ease, box-shadow 120ms ease, background 120ms ease, left 120ms ease, top 120ms ease',
               },
             },
-            person.name.slice(0, 1),
+            person.label || person.name.slice(0, 1),
           );
         }
 
         function PartnerDock() {
+          const { settings: light } = useLightStore();
           const [rows, setRows] = React.useState([]);
           const [layout, setLayout] = React.useState(loadLayout);
           const [notice, setNotice] = React.useState('');
@@ -449,7 +689,10 @@ window.__ModuleLoader__.load({
                 const response = await fetch('/call-panel/available', { cache: 'no-store' });
                 if (!response.ok) return;
                 const data = await response.json();
-                if (alive) setCanOpen(data && data.liuyanben === true);
+                if (alive) {
+                  setCanOpen(data && data.liuyanben === true);
+                  defaultAudioPath = (data && data.sound) || '';
+                }
               } catch {
                 // Host without the route (old build): keep the shortcut hidden.
               }
@@ -655,7 +898,11 @@ window.__ModuleLoader__.load({
             rows.map((person, index) =>
               h(PartnerChip, {
                 key: person.name,
-                person,
+                person: {
+                  ...person,
+                  color: light.colors[person.name] || person.color,
+                  label: light.labels[person.name] || person.name.slice(0, 1),
+                },
                 pos: posOf(person.name, index),
                 onDrop: drop,
                 onOpen: open,
@@ -667,39 +914,88 @@ window.__ModuleLoader__.load({
         function LiangdengButton() {
           const visible = useDockVisible();
           return h(
-            'button',
+            'div',
             {
-              type: 'button',
-              title: visible ? '收起灯牌' : '亮出灯牌',
-              'aria-pressed': visible,
-              onClick: () => setDockVisible(!visible),
               style: {
+                position: 'relative',
                 width: CHIP,
                 height: CHIP,
-                boxSizing: 'border-box',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 0,
-                margin: '8px 8px 10px 0',
-                borderRadius: 9,
-                border: `2px solid ${visible ? LAMP : LAMP_OFF}`,
-                background: visible ? LAMP : 'transparent',
-                color: visible ? '#fff' : LAMP_OFF,
-                font: 'inherit',
-                fontSize: 13,
-                fontWeight: 600,
-                lineHeight: 1,
-                opacity: visible ? 1 : 0.6,
-                cursor: 'pointer',
-                userSelect: 'none',
-                textShadow: visible ? '0 1px 1px rgba(0,0,0,0.35)' : 'none',
-                boxShadow: visible ? '0 0 10px rgba(217,164,65,0.45)' : 'none',
-                transition:
-                  'background 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease',
+                minWidth: CHIP,
+                minHeight: CHIP,
+                flex: 'none',
+                flexShrink: 0,
+                flexGrow: 0,
+                margin: '8px 6px 10px 0',
               },
             },
-            '灯',
+            h(
+              'button',
+              {
+                type: 'button',
+                title: visible ? '收起灯牌' : '亮出灯牌',
+                'aria-pressed': visible,
+                onClick: () => setDockVisible(!visible),
+                style: {
+                  width: CHIP,
+                  height: CHIP,
+                  boxSizing: 'border-box',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  margin: 0,
+                  borderRadius: 9,
+                  border: `2px solid ${visible ? LAMP : LAMP_OFF}`,
+                  background: visible ? LAMP : 'transparent',
+                  color: visible ? '#fff' : LAMP_OFF,
+                  font: 'inherit',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  lineHeight: 1,
+                  opacity: visible ? 1 : 0.6,
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  textShadow: visible ? '0 1px 1px rgba(0,0,0,0.35)' : 'none',
+                  boxShadow: visible ? '0 0 10px rgba(217,164,65,0.45)' : 'none',
+                  transition:
+                    'background 120ms ease, color 120ms ease, border-color 120ms ease, opacity 120ms ease, box-shadow 120ms ease',
+                },
+              },
+              '灯',
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                title: '亮灯设置',
+                onClick: (event) => {
+                  event.stopPropagation();
+                  event.preventDefault();
+                  setSettingsOpen(true);
+                },
+                style: {
+                  position: 'absolute',
+                  right: -5,
+                  top: -5,
+                  width: 14,
+                  height: 14,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 0,
+                  borderRadius: 7,
+                  border: `1px solid ${visible ? LAMP : LAMP_OFF}`,
+                  background: 'var(--dsw-alias-bg-elevated, #ffffff)',
+                  color: visible ? LAMP : LAMP_OFF,
+                  fontSize: 8,
+                  lineHeight: 1,
+                  cursor: 'pointer',
+                  zIndex: 2,
+                  userSelect: 'none',
+                },
+              },
+              '⚙',
+            ),
           );
         }
 

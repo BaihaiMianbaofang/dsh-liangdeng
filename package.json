@@ -1,6 +1,6 @@
 {
   "name": "dsh-liangdeng",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A call popup in the middle of the screen and a draggable row of session avatars for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",
@@ -34,7 +34,9 @@
     "LICENSE"
   ],
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "platform": "web",
       "immediately": true,

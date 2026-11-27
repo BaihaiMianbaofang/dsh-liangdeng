@@ -7,10 +7,25 @@ Two small things for the DeepSeek Harness Web UI:
 
 中文说明见文末。
 
+## Settings
+
+Click the small gear on the top-right corner of the lamp (bottom of the sidebar). There you can:
+
+- turn the chime on or off, and set its volume
+- point it at your own sound file (relative to the workspace, `mp3` / `wav` / `ogg` / `m4a`)
+- change each session chip's colour and letter
+
+Leave the sound path empty to keep the built-in three-note chime. If the workspace contains `声音/提示音.mp3` (or `.wav` / `.ogg` / `.m4a`), that file is used automatically.
+
+Settings live in this browser only.
+
+Close it by clicking outside the card, pressing Esc, or using the × in its corner.
+
+
 ## Install
 
 ```sh
-dsh plugin --profile <your-profile> add dsh-liangdeng
+dsh plugin --profile <your-profile> add github:BaihaiMianbaofang/dsh-liangdeng
 ```
 
 Or, in the app: **Plugins → Add plugin**, pick this folder. Then reload the page with `Ctrl + Shift + R`.
@@ -64,10 +79,25 @@ MIT.
 1. **呼叫弹窗**：agent 调 `call_user`，屏幕中间弹出一张卡片，带【确认】【跳转】。
 2. **灯牌**：一排 32×32 的会话小方块，可以拖。点一下切到那个会话；那个会话有未读、或者在等你操作时，方块会填上颜色。
 
+## 设置
+
+点侧边栏底部那盏灯**右上角的小齿轮**。可以改：
+
+- 提示音开/关、音量
+- 自己的音频文件（相对工作区，`mp3` / `wav` / `ogg` / `m4a`）
+- 每个方块的颜色和文字
+
+音频路径留空 = 用内置的三音。工作区里有 `声音/提示音.mp3`（或 `.wav` / `.ogg` / `.m4a`）会自动用它。
+
+设置只存在这台电脑的浏览器里。
+
+关掉它：点卡片外面、按 Esc、或点右上角 ×。
+
+
 ## 安装
 
 ```sh
-dsh plugin --profile <你的 profile> add dsh-liangdeng
+dsh plugin --profile <你的 profile> add github:BaihaiMianbaofang/dsh-liangdeng
 ```
 
 或者：**插件 → 添加插件**，选这个文件夹；然后 `Ctrl + Shift + R` 刷新页面。
@@ -88,6 +118,7 @@ call_user(
 - **页面得开着**；DSH 关掉就不会弹，这不是系统通知。
 - 方块是**首字 + 颜色**，没有图片头像。
 - 布局存在浏览器 `localStorage`，待确认的呼叫存在宿主内存里，重启清空。
+- 「留言本」入口只有在工作区里有 `留言本/留言本.md` 时才亮。
 
 ## 许可
 
