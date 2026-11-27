@@ -1,6 +1,6 @@
 {
   "name": "dsh-liangdeng",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A call popup in the middle of the screen and a draggable row of session avatars for DeepSeek Harness.",
   "type": "module",
   "license": "MIT",

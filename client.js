@@ -628,6 +628,7 @@ window.__ModuleLoader__.load({
                 onClick: canOpen ? openLiuyanben : undefined,
                 style: {
                   position: 'fixed',
+                  display: canOpen ? 'block' : 'none',
                   left: layout.box.x + boxWidth + 6,
                   top: layout.box.y + 10,
                   width: 22,
